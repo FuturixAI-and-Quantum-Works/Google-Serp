@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"googlescrapper/finance"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"strings"
 	"time"
@@ -73,6 +74,9 @@ func (s *FinanceScraper) FinanceScrape() (*finance.FinanceData, error) {
 	}
 
 	body, err := io.ReadAll(resp.Body)
+
+	// write to a html file
+	ioutil.WriteFile("finance.html", body, 0644)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body: %v", err)

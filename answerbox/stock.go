@@ -20,19 +20,18 @@ type StockBoxContent struct {
 }
 
 func ExtractStockBox(doc *goquery.Document) *AnswerBox {
+	stockContent := &StockBoxContent{}
+	if tickerId := doc.Find("span.iAIpCb.PZPZlf"); tickerId.Length() > 0 {
+		stockContent.TickerId = tickerId.Text()
+	}
+
 	if stockBox := doc.Find("g-card-section.N9cLBc"); stockBox.Length() > 0 {
 		println("Stock Box")
-		stockContent := &StockBoxContent{}
 
 		// Company Name
 
 		if companyName := stockBox.Find("span.aMEhee.PZPZlf"); companyName.Length() > 0 {
 			stockContent.CompanyName = companyName.Text()
-		}
-
-		// TickerId span iAIpCb PZPZlf
-		if tickerId := stockBox.Find("span.iAIpCb.PZPZlf"); tickerId.Length() > 0 {
-			stockContent.TickerId = tickerId.Text()
 		}
 
 		// Price

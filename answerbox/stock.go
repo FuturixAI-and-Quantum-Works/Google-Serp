@@ -21,7 +21,7 @@ type StockBoxContent struct {
 
 func ExtractStockBox(doc *goquery.Document) *AnswerBox {
 	stockContent := &StockBoxContent{}
-	if tickerId := doc.Find("span.iAIpCb.PZPZlf"); tickerId.Length() > 0 {
+	if tickerId := doc.Find("div.iAIpCb.PZPZlf.span"); tickerId.Length() > 0 {
 		stockContent.TickerId = tickerId.Text()
 	}
 

@@ -6,6 +6,7 @@ import (
 
 type StockBoxContent struct {
 	CompanyName string
+	TickerId    string
 	Price       string
 	PriceChange string
 	Open        string
@@ -24,8 +25,14 @@ func ExtractStockBox(doc *goquery.Document) *AnswerBox {
 		stockContent := &StockBoxContent{}
 
 		// Company Name
+
 		if companyName := stockBox.Find("span.aMEhee.PZPZlf"); companyName.Length() > 0 {
 			stockContent.CompanyName = companyName.Text()
+		}
+
+		// TickerId span iAIpCb PZPZlf
+		if tickerId := stockBox.Find("span.iAIpCb.PZPZlf"); tickerId.Length() > 0 {
+			stockContent.TickerId = tickerId.Text()
 		}
 
 		// Price

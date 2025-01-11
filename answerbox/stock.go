@@ -1,11 +1,14 @@
 package answerbox
 
 import (
+	"strings"
+
 	"github.com/PuerkitoBio/goquery"
 )
 
 type StockBoxContent struct {
 	CompanyName string
+	Exchange    string
 	TickerId    string
 	Price       string
 	PriceChange string
@@ -21,8 +24,12 @@ type StockBoxContent struct {
 
 func ExtractStockBox(doc *goquery.Document) *AnswerBox {
 	stockContent := &StockBoxContent{}
-	if tickerId := doc.Find("div.iAIpCb.PZPZlf.span"); tickerId.Length() > 0 {
-		stockContent.TickerId = tickerId.Text()
+	if tickerId := doc.Find("div.iAIpCb.PZPZlf"); tickerId.Length() > 0 {
+		tickerParts := strings.Split(tickerId.Text(), ": ")
+		if len(tickerParts) == 2 {
+			stockContent.TickerId = tickerParts[1]
+			stockContent.Exchange = tickerParts[0]
+		}
 	}
 
 	if stockBox := doc.Find("g-card-section.N9cLBc"); stockBox.Length() > 0 {

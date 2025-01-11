@@ -1,4 +1,4 @@
-package answerbox
+package standard_search
 
 import (
 	"github.com/PuerkitoBio/goquery"
@@ -67,12 +67,12 @@ func ExtractWeatherBox(doc *goquery.Document) *AnswerBox {
 			weatherContent.Forecast = append(weatherContent.Forecast, forecast)
 		})
 
-		answerBox := &AnswerBox{
+		standard_search := &AnswerBox{
 			Type:    "weather",
 			Content: weatherContent,
 		}
 
-		return answerBox
+		return standard_search
 	}
 	return nil
 }

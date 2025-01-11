@@ -1,4 +1,4 @@
-package answerbox
+package standard_search
 
 import (
 	"strings"
@@ -91,12 +91,12 @@ func ExtractStockBox(doc *goquery.Document) *AnswerBox {
 			stockContent.Week52Low = week52Low.Text()
 		}
 
-		answerBox := &AnswerBox{
+		standard_search := &AnswerBox{
 			Type:    "stock",
 			Content: stockContent,
 		}
 
-		return answerBox
+		return standard_search
 	}
 	return nil
 }

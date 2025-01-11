@@ -1,4 +1,4 @@
-package answerbox
+package standard_search
 
 import "github.com/PuerkitoBio/goquery"
 
@@ -21,12 +21,12 @@ func ExtractMathBox(doc *goquery.Document) *AnswerBox {
 			mathContent.Result = result.Text()
 		}
 
-		answerBox := &AnswerBox{
+		standard_search := &AnswerBox{
 			Type:    "math",
 			Content: mathContent,
 		}
 
-		return answerBox
+		return standard_search
 	}
 	return nil
 }

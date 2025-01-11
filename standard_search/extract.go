@@ -1,4 +1,4 @@
-package answerbox
+package standard_search
 
 import (
 	"github.com/PuerkitoBio/goquery"
@@ -12,8 +12,7 @@ type AnswerBox struct {
 	SourceURL   string
 }
 
-func ExtractAnswerBox(doc *goquery.Document) *AnswerBox {
-	// Try each type of answer box in sequence
+func ExtractAnswerbox(doc *goquery.Document) *AnswerBox {
 	if box := ExtractWeatherBox(doc); box != nil {
 		return box
 	}

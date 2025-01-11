@@ -1,4 +1,4 @@
-package answerbox
+package standard_search
 
 import "github.com/PuerkitoBio/goquery"
 
@@ -33,12 +33,12 @@ func ExtractFeaturedSnippet(doc *goquery.Document) *AnswerBox {
 			featuredSnippetContent.SourceURL = sourceURL.Text()
 		}
 
-		answerBox := &AnswerBox{
+		standard_search := &AnswerBox{
 			Type:    "featured_snippet",
 			Content: featuredSnippetContent,
 		}
 
-		return answerBox
+		return standard_search
 	}
 	return nil
 }

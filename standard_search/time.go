@@ -1,4 +1,4 @@
-package answerbox
+package standard_search
 
 import (
 	"github.com/PuerkitoBio/goquery"
@@ -29,12 +29,12 @@ func ExtractTimeBox(doc *goquery.Document) *AnswerBox {
 			timeContent.Location = location.Text()
 		}
 
-		answerBox := &AnswerBox{
+		standard_search := &AnswerBox{
 			Type:    "time",
 			Content: timeContent,
 		}
 
-		return answerBox
+		return standard_search
 	}
 	return nil
 }

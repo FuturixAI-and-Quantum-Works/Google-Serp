@@ -7,6 +7,7 @@ import (
 	"googlescrapper/standard_search"
 	"googlescrapper/utils"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -27,8 +28,9 @@ type SearchResult struct {
 
 // SearchResponse represents the complete search response
 type SearchResponse struct {
-	Links     []standard_search.SearchResult `json:"links,omitempty"`
-	AnswerBox standard_search.AnswerBox      `json:"answer_box,omitempty"`
+	Links             []standard_search.SearchResult     `json:"links,omitempty"`
+	AnswerBox         standard_search.AnswerBox          `json:"answer_box,omitempty"`
+	SuggestedProducts []standard_search.SuggestedProduct `json:"suggested_products,omitempty"`
 }
 
 // SearchConfig holds the search parameters
@@ -101,6 +103,8 @@ func (s *SearchScraper) Scrape() (*SearchResponse, error) {
 
 	body, err := io.ReadAll(resp.Body)
 
+	// write to file
+	ioutil.WriteFile("response.html", body, 0644)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body: %v", err)
 	}
@@ -111,8 +115,9 @@ func (s *SearchScraper) Scrape() (*SearchResponse, error) {
 	}
 
 	searchResponse := &SearchResponse{
-		Links:     []standard_search.SearchResult{},
-		AnswerBox: standard_search.AnswerBox{},
+		Links:             []standard_search.SearchResult{},
+		AnswerBox:         standard_search.AnswerBox{},
+		SuggestedProducts: []standard_search.SuggestedProduct{},
 	}
 
 	extractedResults := standard_search.ExtractSearchResults(doc, s.config.MaxResults)
@@ -123,6 +128,8 @@ func (s *SearchScraper) Scrape() (*SearchResponse, error) {
 	if answerBox != nil {
 		searchResponse.AnswerBox = *answerBox
 	}
+	suggestedProducts := standard_search.ExtractSuggestedProducts(doc)
+	searchResponse.SuggestedProducts = suggestedProducts
 
 	return searchResponse, nil
 }

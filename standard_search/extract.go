@@ -5,11 +5,11 @@ import (
 )
 
 type AnswerBox struct {
-	Type        string
-	Content     interface{}
-	RelatedText string
-	Source      string
-	SourceURL   string
+	Type        string      `json:",omitempty"`
+	Content     interface{} `json:",omitempty"`
+	RelatedText string      `json:",omitempty"`
+	Source      string      `json:",omitempty"`
+	SourceURL   string      `json:",omitempty"`
 }
 
 func ExtractAnswerbox(doc *goquery.Document) *AnswerBox {

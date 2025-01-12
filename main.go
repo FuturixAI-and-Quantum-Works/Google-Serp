@@ -16,6 +16,7 @@ func main() {
 	router.HandleFunc("/search/{query}/{location}/{maxResults}/{latitude}/{longitude}/{useCoords}", search.StandardSearchHandler).Methods("GET")
 	router.HandleFunc("/finance/{symbol}", search.StandardFinanceHandler)
 	router.HandleFunc("/image/{query}", search.StandardImageHandler)
+	router.HandleFunc("/shopping/{query}", search.StandardShoppingHandler)
 	fmt.Println("Server is running on port 8000")
 	log.Fatal(http.ListenAndServe(":8000", router))
 }

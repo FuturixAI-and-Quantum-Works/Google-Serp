@@ -4,6 +4,7 @@ go 1.23.4
 
 require (
 	github.com/PuerkitoBio/goquery v1.10.1
+	github.com/andybalholm/brotli v1.1.1
 	github.com/gorilla/mux v1.8.1
 )
 

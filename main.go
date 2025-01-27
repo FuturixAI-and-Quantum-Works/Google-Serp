@@ -42,7 +42,7 @@ func cacheMiddleware(c *cache, next http.Handler) http.Handler {
 		key := r.URL.Path
 
 		// Check if the query contains the word "time"
-		if r.URL.Query().Get("query") != "" && containsTimeWord(r.URL.Query().Get("query")) {
+		if r.URL.Query().Get("query") != "" && true {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -67,6 +67,7 @@ func cacheMiddleware(c *cache, next http.Handler) http.Handler {
 }
 
 func containsTimeWord(query string) bool {
+	return true
 	return strings.Contains(query, "time")
 }
 
@@ -93,16 +94,17 @@ func main() {
 	router.HandleFunc("/finance/{symbol}", search.StandardFinanceHandler)
 	router.HandleFunc("/image/{query}", search.StandardImageHandler)
 	router.HandleFunc("/shopping/{query}", search.StandardShoppingHandler)
+	router.HandleFunc("/bing/{query}", search.StandardBingHandler)
 
 	redisAddr := os.Getenv("REDIS_ADDR")
 	if redisAddr == "" {
 		redisAddr = "localhost:6379"
 	}
 
-	cache := newCache(redisAddr)
-	router.Use(func(next http.Handler) http.Handler {
-		return cacheMiddleware(cache, next)
-	})
+	// cache := newCache(redisAddr)
+	// router.Use(func(next http.Handler) http.Handler {
+	// 	return cacheMiddleware(cache, next)
+	// })
 
 	port := os.Getenv("PORT")
 	if port == "" {

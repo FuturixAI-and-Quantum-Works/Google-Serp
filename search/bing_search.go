@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	bingsearch "googlescrapper/bing_search"
+	"googlescrapper/utils"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -136,9 +137,15 @@ func (s *BingScraper) BingScrape() (BingInfo, error) {
 			tags = append(tags, tag.Text())
 		})
 
+		extractedUrl, err := utils.GetRedirectedURL(url)
+		if err != nil {
+			println(err.Error())
+			extractedUrl = url
+		}
+
 		BingLinks = append(BingLinks, BingLink{
 			Title:              title,
-			URL:                url,
+			URL:                extractedUrl,
 			WebsiteName:        websiteName,
 			WebsiteAttribution: websiteAttribution,
 			Tags:               tags,

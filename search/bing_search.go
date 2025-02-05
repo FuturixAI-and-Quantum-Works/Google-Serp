@@ -24,6 +24,7 @@ type BingLink struct {
 	WebsiteName        string   `json:"websiteName"`
 	WebsiteAttribution string   `json:"websiteAttribution"`
 	Tags               []string `json:"tags"`
+	Caption            string   `json:"caption"`
 }
 type BingInfo struct {
 	Links     []BingLink               `json:"links"`
@@ -127,7 +128,8 @@ func (s *BingScraper) BingScrape() (BingInfo, error) {
 		}
 
 		websiteName := s.Find("div.tptt").Text()
-		websiteAttribution := s.Find("div.b_attribution cite strong").Text()
+		websiteAttribution := s.Find("div.b_attribution cite").Text()
+		caption := s.Find("div.b_caption p").Text()
 
 		var tags []string
 		s.Find(".tltg").Each(func(i int, tag *goquery.Selection) {
@@ -140,6 +142,7 @@ func (s *BingScraper) BingScrape() (BingInfo, error) {
 			WebsiteName:        websiteName,
 			WebsiteAttribution: websiteAttribution,
 			Tags:               tags,
+			Caption:            caption,
 		})
 	})
 	AnswerBox := bingsearch.ExtractAnswerbox(doc)

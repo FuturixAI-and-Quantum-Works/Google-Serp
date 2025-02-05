@@ -37,7 +37,7 @@ func ExtractAnswer(doc *goquery.Document) *BingAnswerBox {
 
 	if answer.Title == "" {
 		return nil
-	}
+	}		
 
 	return answerbox
 }

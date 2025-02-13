@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
@@ -121,6 +122,9 @@ func (s *BingScraper) BingScrape() (BingInfo, error) {
 
 	var BingLinks []BingLink
 	var BingInfos BingInfo
+	var wg sync.WaitGroup
+	var mu sync.Mutex // To avoid concurrent writes to the shared slice
+
 	doc.Find("li.b_algo").Each(func(i int, s *goquery.Selection) {
 		title := s.Find("h2").Text()
 		url, exists := s.Find("a").Attr("href")
@@ -137,22 +141,30 @@ func (s *BingScraper) BingScrape() (BingInfo, error) {
 			tags = append(tags, tag.Text())
 		})
 
-		extractedUrl, err := utils.GetRedirectedURL(url)
+		wg.Add(1)
+		go func(title, url, websiteName, websiteAttribution, caption string, tags []string) {
+			defer wg.Done()
 
-		if err != nil {
-			// drop that link
-			return
-		}
+			extractedUrl, err := utils.GetRedirectedURL(url)
+			if err != nil {
+				// drop that link
+				return
+			}
 
-		BingLinks = append(BingLinks, BingLink{
-			Title:              title,
-			URL:                extractedUrl,
-			WebsiteName:        websiteName,
-			WebsiteAttribution: websiteAttribution,
-			Tags:               tags,
-			Caption:            caption,
-		})
+			mu.Lock() // Lock before modifying the shared slice
+			BingLinks = append(BingLinks, BingLink{
+				Title:              title,
+				URL:                extractedUrl,
+				WebsiteName:        websiteName,
+				WebsiteAttribution: websiteAttribution,
+				Tags:               tags,
+				Caption:            caption,
+			})
+			mu.Unlock() // Unlock after modifying
+		}(title, url, websiteName, websiteAttribution, caption, tags) // Pass variables to avoid race conditions
 	})
+
+	wg.Wait() // Wait for all goroutines to finish
 	AnswerBox := bingsearch.ExtractAnswerbox(doc)
 
 	BingInfos.Links = BingLinks

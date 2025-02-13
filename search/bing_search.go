@@ -139,6 +139,11 @@ func (s *BingScraper) BingScrape() (BingInfo, error) {
 
 		extractedUrl, err := utils.GetRedirectedURL(url)
 
+		if err != nil {
+			// drop that link
+			return
+		}
+
 		BingLinks = append(BingLinks, BingLink{
 			Title:              title,
 			URL:                extractedUrl,

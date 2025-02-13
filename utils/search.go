@@ -40,7 +40,7 @@ func GetRedirectedURL(rawURL string) (string, error) {
 
 	// Create a custom HTTP client with a timeout and redirect policy
 	client := &http.Client{
-		Timeout: 10 * time.Second,
+		Timeout: 500 * time.Millisecond,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			// This function is called for each redirect.
 			// You can customize the behavior here if needed.

@@ -7,6 +7,7 @@ require (
 	github.com/andybalholm/brotli v1.1.1
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/gorilla/mux v1.8.1
+	github.com/klauspost/compress v1.17.11
 	golang.org/x/exp v0.0.0-20250106191152-7588d65b2ba8
 )
 

@@ -182,10 +182,11 @@ func ExtractStockBox(doc *goquery.Document) *BingAnswerBox {
 
 			companyContent.News = append(companyContent.News, article)
 		})
-		if companyContent.Name == "" {
+
+		if companyContent.Ticker == "" {
 			return nil
 		}
-		// return nil if
+
 		standard_search := &BingAnswerBox{
 			Type:    "stock",
 			Content: companyContent,

@@ -65,7 +65,7 @@ func (s *BingScraper) BingScrape() (BingInfo, error) {
 		// Wait for at least one search result to be visible
 		chromedp.WaitVisible(`li.b_algo`, chromedp.ByQuery),
 		// Wait for 3 seconds
-		chromedp.Sleep(4*time.Second),
+		chromedp.Sleep(2*time.Second),
 		// Extract the full HTML of the page
 		chromedp.OuterHTML(`html`, &htmlContent, chromedp.ByQuery),
 	)
@@ -111,13 +111,6 @@ func (s *BingScraper) BingScrape() (BingInfo, error) {
 		wg.Add(1)
 		go func(title, link, websiteName, websiteAttribution, caption string, tags []string) {
 			defer wg.Done()
-
-			// Process the link (for example, following redirects)
-			// extractedURL, err := utils.GetRedirectedURL(link)
-			// if err != nil {
-			// 	println("Error getting redirected URL")
-			// 	return
-			// }
 
 			mu.Lock()
 			BingLinks = append(BingLinks, BingLink{

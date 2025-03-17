@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"googlescrapper/cache"
+	"io/ioutil"
 	"net/http"
 	"strings"
 	"time"
@@ -46,13 +47,20 @@ type Performance struct {
 }
 
 type KeyMetrics struct {
-	DividendYield string `json:"dividendYield"`
-	PB            string `json:"pb"`
-	PE            string `json:"pe"`
-	Beta          string `json:"beta"`
-	DebtToEquity  string `json:"debtToEquity"`
+	DividendYield MetricData `json:"dividendYield"`
+	PB            MetricData `json:"pb"`
+	PE            MetricData `json:"pe"`
+	Beta          MetricData `json:"beta"`
+	DebtToEquity  MetricData `json:"debtToEquity"`
+	PEGRatio      MetricData `json:"pegRatio"`
 }
 
+// New struct to hold both value and status
+type MetricData struct {
+	Value       string `json:"value"`
+	Info        string `json:"info"`
+	Description string `json:"description"`
+}
 type NewsArticle struct {
 	Title    string `json:"title"`
 	Link     string `json:"link"`
@@ -182,11 +190,36 @@ func ScrapeStockData(w http.ResponseWriter, r *http.Request) {
 
 		// Key Metrics
 		keyMetrics := KeyMetrics{
-			DividendYield: cleanMetric(doc.Find(".storyDetails_info__i53sk li:nth-child(1) .storyDetails_databox__ejMc4 span").Eq(1).Text()),
-			PB:            cleanMetric(doc.Find(".storyDetails_info__i53sk li:nth-child(2) .storyDetails_databox__ejMc4 span").Eq(1).Text()),
-			PE:            cleanMetric(doc.Find(".storyDetails_info__i53sk li:nth-child(3) .storyDetails_databox__ejMc4 span").Eq(1).Text()),
-			Beta:          cleanMetric(doc.Find(".storyDetails_info__i53sk li:nth-child(4) .storyDetails_databox__ejMc4 span").Eq(1).Text()),
-			DebtToEquity:  cleanMetric(doc.Find(".storyDetails_info__i53sk li:nth-child(5) .storyDetails_databox__ejMc4 span").Eq(1).Text()),
+			DividendYield: MetricData{
+				Value:       cleanMetric(doc.Find(".storyDetails_info__i53sk .storyDetails_databox__ejMc4:contains('Dividend Yield') span").Eq(1).Text()),
+				Info:        cleanText(doc.Find(".storyDetails_info__i53sk .storyDetails_databox__ejMc4:contains('Dividend Yield')").Next().Text()),
+				Description: cleanText(doc.Find(".storyDetails_info__i53sk .storyDetails_databox__ejMc4:contains('Dividend Yield') .storyDetails_tooltip__JeLd2").Text()),
+			},
+			PB: MetricData{
+				Value:       cleanMetric(doc.Find(".storyDetails_info__i53sk .storyDetails_databox__ejMc4:contains('P/B') span").Eq(1).Text()),
+				Info:        cleanText(doc.Find(".storyDetails_info__i53sk .storyDetails_databox__ejMc4:contains('P/B')").Next().Text()),
+				Description: cleanText(doc.Find(".storyDetails_info__i53sk .storyDetails_databox__ejMc4:contains('P/B') .storyDetails_tooltip__JeLd2").Text()),
+			},
+			PE: MetricData{
+				Value:       cleanMetric(doc.Find(".storyDetails_info__i53sk .storyDetails_databox__ejMc4:contains('P/E') span").Eq(1).Text()),
+				Info:        cleanText(doc.Find(".storyDetails_info__i53sk .storyDetails_databox__ejMc4:contains('P/E')").Next().Text()),
+				Description: cleanText(doc.Find(".storyDetails_info__i53sk .storyDetails_databox__ejMc4:contains('P/E') .storyDetails_tooltip__JeLd2").Text()),
+			},
+			Beta: MetricData{
+				Value:       cleanMetric(doc.Find(".storyDetails_info__i53sk .storyDetails_databox__ejMc4:contains('Beta') span").Eq(1).Text()),
+				Info:        cleanText(doc.Find(".storyDetails_info__i53sk .storyDetails_databox__ejMc4:contains('Beta')").Next().Text()),
+				Description: cleanText(doc.Find(".storyDetails_info__i53sk .storyDetails_databox__ejMc4:contains('Beta') .storyDetails_tooltip__JeLd2").Text()),
+			},
+			DebtToEquity: MetricData{
+				Value:       cleanMetric(doc.Find(".storyDetails_info__i53sk .storyDetails_databox__ejMc4:contains('Debt To Equity') span").Eq(1).Text()),
+				Info:        cleanText(doc.Find(".storyDetails_info__i53sk .storyDetails_databox__ejMc4:contains('Debt To Equity')").Next().Text()),
+				Description: cleanText(doc.Find(".storyDetails_info__i53sk .storyDetails_databox__ejMc4:contains('Debt To Equity') .storyDetails_tooltip__JeLd2").Text()),
+			},
+			PEGRatio: MetricData{
+				Value:       cleanMetric(doc.Find(".storyDetails_info__i53sk .storyDetails_databox__ejMc4:contains('PEG Ratio') span").Eq(1).Text()),
+				Info:        cleanText(doc.Find(".storyDetails_info__i53sk .storyDetails_databox__ejMc4:contains('PEG Ratio')").Next().Text()),
+				Description: cleanText(doc.Find(".storyDetails_info__i53sk .storyDetails_databox__ejMc4:contains('PEG Ratio') .storyDetails_tooltip__JeLd2").Text()),
+			},
 		}
 
 		// Related News
@@ -222,6 +255,15 @@ func ScrapeStockData(w http.ResponseWriter, r *http.Request) {
 				})
 			}
 		})
+		// Print HTML of .storyDetails_compInfo__wSZUv
+		html, _ := doc.Html()
+
+		// write to file
+		err = ioutil.WriteFile("response.html", []byte(html), 0644)
+
+		if err != nil {
+			return nil, fmt.Errorf("failed to get HTML: %v", err)
+		}
 
 		company := CompanyDetails{
 			Industry:    cleanText(doc.Find(".storyDetails_compInfo__wSZUv li:contains('Industry')").Contents().Last().Text()),

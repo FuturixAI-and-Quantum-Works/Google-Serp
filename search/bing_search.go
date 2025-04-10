@@ -18,6 +18,7 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/chromedp/cdproto/network"
+	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
 	"github.com/gorilla/mux"
 )
@@ -111,6 +112,16 @@ func (pool *BrowserPool) scaleUp(n int) {
 		ctx, cancel := chromedp.NewContext(pool.allocCtx, chromedp.WithLogf(func(format string, args ...interface{}) {
 			// Silent logging
 		}))
+
+		// Add event listeners to handle the events that need handling
+		chromedp.ListenTarget(ctx, func(ev interface{}) {
+			// Silently handle the EventFrameStartedNavigating event
+			switch ev.(type) {
+			case *page.EventFrameStartedNavigating:
+				// Just log or silently ignore, depending on your needs
+				// fmt.Printf("Frame started navigating\n")
+			}
+		})
 
 		// Initialize the browser in advance
 		if err := chromedp.Run(ctx, chromedp.Navigate("about:blank")); err != nil {

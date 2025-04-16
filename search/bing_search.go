@@ -634,8 +634,9 @@ func getHTML(url string) (string, error) {
 		network.ClearBrowserCookies(),
 		// Navigate to the search URL
 		chromedp.Navigate(url),
-		// Wait for results to appear
-		chromedp.WaitVisible(`li.b_algo`, chromedp.ByQuery),
+		// wait for p elements to appear
+		chromedp.WaitVisible(`p`, chromedp.ByQuery),
+
 		// Extract the full HTML of the page
 		chromedp.OuterHTML(`html`, &htmlContent, chromedp.ByQuery),
 	)

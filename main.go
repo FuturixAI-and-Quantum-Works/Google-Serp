@@ -22,6 +22,7 @@ func main() {
 	router.HandleFunc("/image/{query}", search.StandardImageHandler)
 	router.HandleFunc("/shopping/{query}", search.StandardShoppingHandler)
 	router.HandleFunc("/bing/{query}", search.StandardBingHandler)
+	router.HandleFunc("/html", search.GetHTMLFromUrl)
 	router.HandleFunc("/stock/charts", stock.GetCharts)
 	router.HandleFunc("/stock/live/{tickerId}", stock.GetLivePricePred)
 	router.HandleFunc("/stock/shareholdings/{tickerId}/{type}", stock.GetShareholdingsHandler)

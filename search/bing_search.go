@@ -276,10 +276,8 @@ func (pool *BrowserPool) GetContext() (context.Context, context.CancelFunc, erro
 				chromedp.Navigate("about:blank"),
 			)
 
-			// Put the context back in the pool
 			select {
 			case pool.contexts <- ctx:
-				// Successfully returned to pool
 			default:
 				// Pool channel is full, context will be GC'd
 				if cancel, exists := pool.cancelFuncs[ctx]; exists {
@@ -595,6 +593,90 @@ func (s *BingScraper) fetchBingResults() (BingInfo, error) {
 	BingInfos.AnswerBox = *<-answerBoxCh
 
 	return BingInfos, nil
+}
+
+// function to get html of a page
+func getHTML(url string) (string, error) {
+	ctx, returnCtx, err := globalBrowserPool.GetContext()
+
+	if err != nil {
+		return "", fmt.Errorf("failed to get browser context: %v", err)
+	}
+
+	defer returnCtx() // Return the context to the pool when done
+
+	var htmlContent string
+
+	// Add a timeout for this specific operation
+	timeoutCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	// Navigate to the search URL and scrape the content
+	err = chromedp.Run(timeoutCtx,
+		// Set custom headers for this request
+		chromedp.ActionFunc(func(ctx context.Context) error {
+			return network.SetExtraHTTPHeaders(map[string]interface{}{
+				"accept":                    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+				"accept-language":           "en-US,en;q=0.9",
+				"cache-control":             "no-cache",
+				"pragma":                    "no-cache",
+				"sec-ch-ua":                 "\"Chromium\";v=\"135\", \"Not-A.Brand\";v=\"8\"",
+				"sec-ch-ua-mobile":          "?0",
+				"sec-ch-ua-platform":        "\"Linux\"",
+				"sec-fetch-dest":            "document",
+				"sec-fetch-mode":            "navigate",
+				"sec-fetch-site":            "same-origin",
+				"sec-fetch-user":            "?1",
+				"upgrade-insecure-requests": "1",
+			}).Do(ctx)
+		}),
+		// Clear cookies to avoid personalization
+		network.ClearBrowserCookies(),
+		// Navigate to the search URL
+		chromedp.Navigate(url),
+		// Wait for results to appear
+		chromedp.WaitVisible(`li.b_algo`, chromedp.ByQuery),
+		// Extract the full HTML of the page
+		chromedp.OuterHTML(`html`, &htmlContent, chromedp.ByQuery),
+	)
+	if err != nil {
+		return "", fmt.Errorf("failed to scrape content: %v", err)
+	}
+
+	// return the HTML content
+	return htmlContent, nil
+}
+
+func GetHTMLFromUrl(w http.ResponseWriter, r *http.Request) {
+	var requestBody struct {
+		URL string `json:"url"`
+	}
+
+	// Parse the JSON body
+	println("Parsing JSON body")
+
+	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+		println("Error decoding JSON body:", err)
+		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	if requestBody.URL == "" {
+		println("Error: URL parameter is required")
+		http.Error(w, "URL parameter is required in the request body", http.StatusBadRequest)
+		return
+	}
+
+	htmlContent, err := getHTML(requestBody.URL)
+	if err != nil {
+		println("Error scraping results:", err.Error())
+		http.Error(w, "Error scraping results", http.StatusInternalServerError)
+		return
+	}
+
+	println(htmlContent)
+	w.Header().Set("Content-Type", "text/plain")
+	w.Write([]byte(htmlContent))
 }
 
 func StandardBingHandler(w http.ResponseWriter, r *http.Request) {

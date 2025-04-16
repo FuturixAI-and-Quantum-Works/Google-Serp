@@ -60,8 +60,8 @@ type BrowserPool struct {
 var (
 	// Global browser pool with auto-scaling
 	globalBrowserPool = &BrowserPool{
-		minSize:     3,
-		maxSize:     20,
+		minSize:     10,
+		maxSize:     30,
 		currentSize: 0,
 		contexts:    make(chan context.Context, 20), // Buffer up to max size
 		cancelFuncs: make(map[context.Context]context.CancelFunc),
@@ -613,33 +613,10 @@ func getHTML(url string) (string, error) {
 
 	// Navigate to the search URL and scrape the content
 	err = chromedp.Run(timeoutCtx,
-		// Set custom headers for this request
-		chromedp.ActionFunc(func(ctx context.Context) error {
-			return network.SetExtraHTTPHeaders(map[string]interface{}{
-				"accept":                    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
-				"accept-language":           "en-US,en;q=0.9",
-				"cache-control":             "no-cache",
-				"pragma":                    "no-cache",
-				"sec-ch-ua":                 "\"Chromium\";v=\"135\", \"Not-A.Brand\";v=\"8\"",
-				"sec-ch-ua-mobile":          "?0",
-				"sec-ch-ua-platform":        "\"Linux\"",
-				"sec-fetch-dest":            "document",
-				"sec-fetch-mode":            "navigate",
-				"sec-fetch-site":            "same-origin",
-				"sec-fetch-user":            "?1",
-				"upgrade-insecure-requests": "1",
-			}).Do(ctx)
-		}),
-		// Clear cookies to avoid personalization
-		network.ClearBrowserCookies(),
 		// Navigate to the search URL
 		chromedp.Navigate(url),
-		// Wait for p elements to appear with a deadline of 200ms
-		chromedp.ActionFunc(func(ctx context.Context) error {
-			deadlineCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
-			defer cancel()
-			return chromedp.Run(deadlineCtx, chromedp.WaitVisible(`p`, chromedp.ByQuery))
-		}),
+		// Wait for 500ms
+		chromedp.Sleep(500*time.Millisecond),
 		// Extract the full HTML of the page
 		chromedp.OuterHTML(`html`, &htmlContent, chromedp.ByQuery),
 	)

@@ -80,15 +80,13 @@ func (pool *BrowserPool) Initialize() {
 	// Create a shared allocator context with options
 	opts := append(chromedp.DefaultExecAllocatorOptions[:],
 		chromedp.Flag("headless", true),
-		chromedp.Flag("disable-gpu", true),
 		chromedp.Flag("disable-extensions", true),
 		chromedp.Flag("disable-dev-shm-usage", true),
 		chromedp.Flag("no-sandbox", true),
-		chromedp.Flag("disable-setuid-sandbox", true),
 		chromedp.Flag("disable-web-security", true),
-		chromedp.Flag("disable-features", "IsolateOrigins,site-per-process"),
 		chromedp.Flag("disable-site-isolation-trials", true),
 		chromedp.Flag("ignore-certificate-errors", true),
+		chromedp.Flag("enable-javascript", true), // Allow JavaScript execution
 		chromedp.WindowSize(1920, 1080),
 		chromedp.UserAgent("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36"),
 	)
@@ -597,67 +595,35 @@ func (s *BingScraper) fetchBingResults() (BingInfo, error) {
 
 // function to get html of a page
 func getHTML(url string) (string, error) {
+	ctx, returnCtx, err := globalBrowserPool.GetContext()
+
+	if err != nil {
+		return "", fmt.Errorf("failed to get browser context: %v", err)
+	}
+
+	defer returnCtx() // Return the context to the pool when done
+
 	var htmlContent string
-	var err error
 
-	// Define maximum retry attempts
-	maxRetries := 3
-	for attempt := 1; attempt <= maxRetries; attempt++ {
+	// Add a timeout for this specific operation
+	timeoutCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
 
-		// Get a browser context from the pool
-		ctx, returnCtx, errCtx := globalBrowserPool.GetContext()
-		if errCtx != nil {
-			return "", fmt.Errorf("failed to get browser context: %v", errCtx)
-		}
-
-		// Ensure the context is returned to pool at the end of this attempt
-		defer returnCtx()
-
-		// Create a timeout context for the navigation
-		timeoutCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-		defer cancel()
-
-		err = chromedp.Run(timeoutCtx,
-			chromedp.Navigate(url),
-			chromedp.Sleep(1*time.Second), // adjust based on page load characteristics
-			chromedp.OuterHTML(`html`, &htmlContent, chromedp.ByQuery),
-		)
-		if err == nil && htmlContent != "" {
-			// Page successfully retrieved.
-			return htmlContent, nil
-		}
-		// Optionally log the error details
-		fmt.Printf("Attempt %d: failed to retrieve page %s: %v\n", attempt, url, err)
-
-		// For transient errors, you might also wait a bit before retrying.
-		time.Sleep(500 * time.Millisecond)
-	}
-
-	// Fallback: Try using a direct HTTP client if browser retrieval fails
-	fallbackContent, fallbackErr := fetchViaHTTP(url)
-	if fallbackErr == nil && fallbackContent != "" {
-		return fallbackContent, nil
-	}
-
-	return "", fmt.Errorf("failed to retrieve page after %d attempts; last error: %v", maxRetries, err)
-}
-
-func fetchViaHTTP(url string) (string, error) {
-	// Use a fast HTTP client as a fallback, knowing it may not render JavaScript
-	resp, err := http.Get(url)
+	// Navigate to the search URL and scrape the content
+	err = chromedp.Run(timeoutCtx,
+		// Navigate to the search URL
+		chromedp.Navigate(url),
+		// Wait for 500ms
+		chromedp.Sleep(1000*time.Millisecond),
+		// Extract the full HTML of the page
+		chromedp.OuterHTML(`html`, &htmlContent, chromedp.ByQuery),
+	)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to scrape content: %v", err)
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("non-200 status: %d", resp.StatusCode)
-	}
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-	return string(bodyBytes), nil
+	// return the HTML content
+	return htmlContent, nil
 }
 
 func GetHTMLFromUrl(w http.ResponseWriter, r *http.Request) {

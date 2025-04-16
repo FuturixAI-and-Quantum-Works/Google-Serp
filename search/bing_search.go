@@ -636,7 +636,7 @@ func getHTML(url string) (string, error) {
 		chromedp.Navigate(url),
 		// Wait for p elements to appear with a deadline of 200ms
 		chromedp.ActionFunc(func(ctx context.Context) error {
-			deadlineCtx, cancel := context.WithTimeout(ctx, 800*time.Millisecond)
+			deadlineCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
 			defer cancel()
 			return chromedp.Run(deadlineCtx, chromedp.WaitVisible(`p`, chromedp.ByQuery))
 		}),

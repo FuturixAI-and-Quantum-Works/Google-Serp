@@ -597,35 +597,67 @@ func (s *BingScraper) fetchBingResults() (BingInfo, error) {
 
 // function to get html of a page
 func getHTML(url string) (string, error) {
-	ctx, returnCtx, err := globalBrowserPool.GetContext()
-
-	if err != nil {
-		return "", fmt.Errorf("failed to get browser context: %v", err)
-	}
-
-	defer returnCtx() // Return the context to the pool when done
-
 	var htmlContent string
+	var err error
 
-	// Add a timeout for this specific operation
-	timeoutCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
+	// Define maximum retry attempts
+	maxRetries := 3
+	for attempt := 1; attempt <= maxRetries; attempt++ {
 
-	// Navigate to the search URL and scrape the content
-	err = chromedp.Run(timeoutCtx,
-		// Navigate to the search URL
-		chromedp.Navigate(url),
-		// Wait for 500ms
-		chromedp.Sleep(1000*time.Millisecond),
-		// Extract the full HTML of the page
-		chromedp.OuterHTML(`html`, &htmlContent, chromedp.ByQuery),
-	)
-	if err != nil {
-		return "", fmt.Errorf("failed to scrape content: %v", err)
+		// Get a browser context from the pool
+		ctx, returnCtx, errCtx := globalBrowserPool.GetContext()
+		if errCtx != nil {
+			return "", fmt.Errorf("failed to get browser context: %v", errCtx)
+		}
+
+		// Ensure the context is returned to pool at the end of this attempt
+		defer returnCtx()
+
+		// Create a timeout context for the navigation
+		timeoutCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+		defer cancel()
+
+		err = chromedp.Run(timeoutCtx,
+			chromedp.Navigate(url),
+			chromedp.Sleep(1*time.Second), // adjust based on page load characteristics
+			chromedp.OuterHTML(`html`, &htmlContent, chromedp.ByQuery),
+		)
+		if err == nil && htmlContent != "" {
+			// Page successfully retrieved.
+			return htmlContent, nil
+		}
+		// Optionally log the error details
+		fmt.Printf("Attempt %d: failed to retrieve page %s: %v\n", attempt, url, err)
+
+		// For transient errors, you might also wait a bit before retrying.
+		time.Sleep(500 * time.Millisecond)
 	}
 
-	// return the HTML content
-	return htmlContent, nil
+	// Fallback: Try using a direct HTTP client if browser retrieval fails
+	fallbackContent, fallbackErr := fetchViaHTTP(url)
+	if fallbackErr == nil && fallbackContent != "" {
+		return fallbackContent, nil
+	}
+
+	return "", fmt.Errorf("failed to retrieve page after %d attempts; last error: %v", maxRetries, err)
+}
+
+func fetchViaHTTP(url string) (string, error) {
+	// Use a fast HTTP client as a fallback, knowing it may not render JavaScript
+	resp, err := http.Get(url)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("non-200 status: %d", resp.StatusCode)
+	}
+	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	return string(bodyBytes), nil
 }
 
 func GetHTMLFromUrl(w http.ResponseWriter, r *http.Request) {

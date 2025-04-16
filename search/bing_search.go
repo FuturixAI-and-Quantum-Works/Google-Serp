@@ -616,7 +616,7 @@ func getHTML(url string) (string, error) {
 		// Navigate to the search URL
 		chromedp.Navigate(url),
 		// Wait for 500ms
-		chromedp.Sleep(500*time.Millisecond),
+		chromedp.Sleep(1000*time.Millisecond),
 		// Extract the full HTML of the page
 		chromedp.OuterHTML(`html`, &htmlContent, chromedp.ByQuery),
 	)

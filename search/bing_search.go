@@ -1,3 +1,4 @@
+// Package search provides search engine scraping functionality
 package search
 
 import (
@@ -13,16 +14,17 @@ import (
 	"sync"
 	"time"
 
-	bingsearch "googlescrapper/bing_search"
+	"googlescrapper/bingsearch"
+	"googlescrapper/browser"
 	"googlescrapper/cache"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/chromedp/cdproto/network"
-	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
 	"github.com/gorilla/mux"
 )
 
+// BingLink represents a single search result link from Bing
 type BingLink struct {
 	Title              string   `json:"title"`
 	URL                string   `json:"url"`
@@ -31,395 +33,31 @@ type BingLink struct {
 	Tags               []string `json:"tags"`
 	Caption            string   `json:"caption"`
 }
+
+// BingInfo represents the complete search results from Bing
 type BingInfo struct {
 	Links     []BingLink               `json:"links"`
 	AnswerBox bingsearch.BingAnswerBox `json:"answer_box"`
 }
 
+// BingConfig holds configuration for Bing searches
 type BingConfig struct {
 	Query string
 }
 
-// BrowserPool manages a pool of browser contexts for reuse
-type BrowserPool struct {
-	contexts      chan context.Context
-	cancelFuncs   map[context.Context]context.CancelFunc
-	initOnce      sync.Once
-	minSize       int
-	maxSize       int
-	currentSize   int
-	mu            sync.Mutex
-	allocCtx      context.Context
-	allocCancel   context.CancelFunc
-	initialized   bool
-	scaleUpCount  int       // Tracks consecutive scale up events
-	scaleDownTime time.Time // Last time we scaled down
-	waitQueue     int       // Count of waiting requests
-}
-
-var (
-	// Global browser pool with auto-scaling
-	globalBrowserPool = &BrowserPool{
-		minSize:     10,
-		maxSize:     30,
-		currentSize: 0,
-		contexts:    make(chan context.Context, 20), // Buffer up to max size
-		cancelFuncs: make(map[context.Context]context.CancelFunc),
-	}
-)
-
-// Initialize creates the browser pool
-func (pool *BrowserPool) Initialize() {
-	pool.mu.Lock()
-	defer pool.mu.Unlock()
-
-	if pool.initialized {
-		return
-	}
-
-	// Create a shared allocator context with options
-	opts := append(chromedp.DefaultExecAllocatorOptions[:],
-		chromedp.Flag("headless", true),
-		chromedp.Flag("disable-extensions", true),
-		chromedp.Flag("disable-dev-shm-usage", true),
-		chromedp.Flag("no-sandbox", true),
-		chromedp.Flag("disable-web-security", true),
-		chromedp.Flag("disable-site-isolation-trials", true),
-		chromedp.Flag("ignore-certificate-errors", true),
-		chromedp.Flag("enable-javascript", true), // Allow JavaScript execution
-		chromedp.WindowSize(1920, 1080),
-		chromedp.UserAgent("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36"),
-	)
-
-	pool.allocCtx, pool.allocCancel = chromedp.NewExecAllocator(context.Background(), opts...)
-
-	// Create initial set of browser contexts
-	pool.scaleUp(pool.minSize)
-
-	// Start the auto-scaler
-	go pool.autoScaler()
-
-	pool.initialized = true
-	fmt.Printf("Browser pool initialized with %d browsers (min: %d, max: %d)\n",
-		pool.currentSize, pool.minSize, pool.maxSize)
-}
-
-// scaleUp adds n browser instances to the pool
-func (pool *BrowserPool) scaleUp(n int) {
-	for i := 0; i < n; i++ {
-		ctx, cancel := chromedp.NewContext(pool.allocCtx, chromedp.WithLogf(func(format string, args ...interface{}) {
-			// Silent logging
-		}))
-
-		// Add event listeners to handle the events that need handling
-		chromedp.ListenTarget(ctx, func(ev interface{}) {
-			// Silently handle the EventFrameStartedNavigating event
-			switch ev.(type) {
-			case *page.EventFrameStartedNavigating:
-				// Just log or silently ignore, depending on your needs
-				// fmt.Printf("Frame started navigating\n")
-			}
-		})
-
-		// Initialize the browser in advance
-		if err := chromedp.Run(ctx, chromedp.Navigate("about:blank")); err != nil {
-			fmt.Printf("Error initializing browser: %v\n", err)
-			cancel()
-			continue
-		}
-
-		pool.contexts <- ctx
-		pool.cancelFuncs[ctx] = cancel
-		pool.currentSize++
-	}
-
-	if n > 0 {
-		fmt.Printf("Scaled up pool by %d browsers to %d total\n", n, pool.currentSize)
-	}
-}
-
-// scaleDown removes n browser instances from the pool
-func (pool *BrowserPool) scaleDown(n int) {
-	if pool.currentSize <= pool.minSize {
-		return // Don't scale below minimum
-	}
-
-	// Limit scale down to not go below minSize
-	if pool.currentSize-n < pool.minSize {
-		n = pool.currentSize - pool.minSize
-	}
-
-	if n <= 0 {
-		return
-	}
-
-	for i := 0; i < n; i++ {
-		select {
-		case ctx := <-pool.contexts:
-			// Get the cancel function
-			if cancel, exists := pool.cancelFuncs[ctx]; exists {
-				cancel()
-				delete(pool.cancelFuncs, ctx)
-				pool.currentSize--
-			}
-		default:
-			// No contexts available to scale down
-			return
-		}
-	}
-
-	pool.scaleDownTime = time.Now()
-	fmt.Printf("Scaled down pool by %d browsers to %d total\n", n, pool.currentSize)
-}
-
-// autoScaler periodically checks if the pool needs to be resized
-func (pool *BrowserPool) autoScaler() {
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		<-ticker.C
-
-		pool.mu.Lock()
-
-		// Get metrics
-		poolSize := pool.currentSize
-		availableBrowsers := len(pool.contexts)
-		waitingRequests := pool.waitQueue
-
-		// Calculate utilization percentage (0-100)
-		utilization := 0
-		if poolSize > 0 {
-			utilization = 100 * (poolSize - availableBrowsers) / poolSize
-		}
-
-		// Scale up logic
-		if (utilization > 80 || waitingRequests > 0) && poolSize < pool.maxSize {
-			// Calculate how many browsers to add
-			toAdd := 1
-			if waitingRequests > 1 {
-				// Add more browsers if there are multiple waiting requests
-				toAdd = min(waitingRequests, pool.maxSize-poolSize)
-			}
-
-			pool.scaleUpCount++
-			// If we've needed to scale up multiple times in succession, add more browsers
-			if pool.scaleUpCount > 3 {
-				toAdd = min(toAdd*2, pool.maxSize-poolSize)
-			}
-
-			pool.scaleUp(toAdd)
-		} else {
-			pool.scaleUpCount = 0
-		}
-
-		// Scale down logic - only if utilization is low and we haven't scaled down recently
-		cooldownPeriod := 2 * time.Minute
-		if utilization < 30 && poolSize > pool.minSize && time.Since(pool.scaleDownTime) > cooldownPeriod {
-			// Calculate how many browsers to remove
-			excessBrowsers := availableBrowsers - max(1, poolSize/5) // Keep at least 20% capacity as buffer
-			toRemove := min(excessBrowsers, poolSize-pool.minSize)
-
-			if toRemove > 0 {
-				pool.scaleDown(toRemove)
-			}
-		}
-
-		pool.mu.Unlock()
-	}
-}
-
-// min returns the smaller of two integers
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-// max returns the larger of two integers
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-// GetContext gets a browser context from the pool
-func (pool *BrowserPool) GetContext() (context.Context, context.CancelFunc, error) {
-	pool.initOnce.Do(func() {
-		pool.Initialize()
-	})
-
-	pool.mu.Lock()
-	pool.waitQueue++
-	pool.mu.Unlock()
-
-	// Try to get a context immediately or wait up to 500ms
-	select {
-	case ctx := <-pool.contexts:
-		pool.mu.Lock()
-		pool.waitQueue--
-		pool.mu.Unlock()
-
-		// Create a return function that puts the context back in the pool
-		returnCtx := func() {
-			// Refresh the browser before returning to pool
-			refreshCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-			defer cancel()
-
-			// Navigate to blank page to clear state and reduce memory
-			_ = chromedp.Run(refreshCtx,
-				network.ClearBrowserCookies(),
-				chromedp.Navigate("about:blank"),
-			)
-
-			select {
-			case pool.contexts <- ctx:
-			default:
-				// Pool channel is full, context will be GC'd
-				if cancel, exists := pool.cancelFuncs[ctx]; exists {
-					pool.mu.Lock()
-					cancel()
-					delete(pool.cancelFuncs, ctx)
-					pool.currentSize--
-					pool.mu.Unlock()
-				}
-			}
-		}
-
-		return ctx, returnCtx, nil
-
-	case <-time.After(500 * time.Millisecond):
-		// If we waited more than 500ms, try to create a new browser instance
-		pool.mu.Lock()
-
-		// Only create a new instance if we're below max capacity
-		if pool.currentSize < pool.maxSize {
-			ctx, cancel := chromedp.NewContext(pool.allocCtx, chromedp.WithLogf(func(format string, args ...interface{}) {
-				// Silent logging
-			}))
-
-			// Try to initialize the browser quickly
-			initCtx, initCancel := context.WithTimeout(context.Background(), 5*time.Second)
-			err := chromedp.Run(initCtx, chromedp.Navigate("about:blank"))
-			initCancel()
-
-			if err != nil {
-				cancel()
-				pool.waitQueue--
-				pool.mu.Unlock()
-				return nil, nil, fmt.Errorf("failed to create new browser instance: %v", err)
-			}
-
-			// Add to pool management
-			pool.cancelFuncs[ctx] = cancel
-			pool.currentSize++
-			pool.waitQueue--
-			pool.mu.Unlock()
-
-			// Create return function
-			returnCtx := func() {
-				// Refresh before returning to pool
-				refreshCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-				defer cancel()
-
-				_ = chromedp.Run(refreshCtx,
-					network.ClearBrowserCookies(),
-					chromedp.Navigate("about:blank"),
-				)
-
-				// Put context back in the pool
-				select {
-				case pool.contexts <- ctx:
-					// Successfully returned to pool
-				default:
-					// Pool is full, this extra instance will be closed
-					if cancel, exists := pool.cancelFuncs[ctx]; exists {
-						pool.mu.Lock()
-						cancel()
-						delete(pool.cancelFuncs, ctx)
-						pool.currentSize--
-						pool.mu.Unlock()
-					}
-				}
-			}
-
-			return ctx, returnCtx, nil
-		}
-
-		// If we couldn't create a new instance, wait longer for an existing one
-		pool.mu.Unlock()
-
-		// Wait up to 3 more seconds for a context to become available
-		select {
-		case ctx := <-pool.contexts:
-			pool.mu.Lock()
-			pool.waitQueue--
-			pool.mu.Unlock()
-
-			returnCtx := func() {
-				select {
-				case pool.contexts <- ctx:
-					// Successfully returned to pool
-				default:
-					// Pool is full
-					fmt.Println("Browser pool is full, cannot return context")
-				}
-			}
-
-			return ctx, returnCtx, nil
-		case <-time.After(3 * time.Second):
-			pool.mu.Lock()
-			pool.waitQueue--
-			pool.mu.Unlock()
-			return nil, nil, fmt.Errorf("timeout getting browser context from pool")
-		}
-	}
-}
-
-// Shutdown closes all browser instances
-func (pool *BrowserPool) Shutdown() {
-	pool.mu.Lock()
-	defer pool.mu.Unlock()
-
-	if !pool.initialized {
-		return
-	}
-
-	// Cancel all contexts
-	for ctx, cancel := range pool.cancelFuncs {
-		cancel()
-		delete(pool.cancelFuncs, ctx)
-	}
-
-	// Cancel the allocator
-	if pool.allocCancel != nil {
-		pool.allocCancel()
-	}
-
-	// Clear the channel
-	for len(pool.contexts) > 0 {
-		<-pool.contexts
-	}
-
-	pool.currentSize = 0
-	pool.initialized = false
-	fmt.Println("Browser pool shut down")
-}
-
-// BingScraper handles the scraping functionality
+// BingScraper handles the scraping functionality for Bing search
 type BingScraper struct {
 	config BingConfig
 }
 
-// NewBingScraper creates a new scraper instance
+// NewBingScraper creates a new Bing scraper instance
 func NewBingScraper(config BingConfig) *BingScraper {
 	return &BingScraper{
 		config: config,
 	}
 }
 
+// buildBingURL creates a Bing search URL for the given query
 func (s *BingScraper) buildBingURL(query string) string {
 	return fmt.Sprintf("https://www.bing.com/search?q=%s", url.QueryEscape(query))
 }
@@ -431,6 +69,7 @@ func (s *BingScraper) generateCacheKey() string {
 	return "bing_search:" + hex.EncodeToString(hash[:])
 }
 
+// BingScrape performs a Bing search and returns the results
 func (s *BingScraper) BingScrape() (BingInfo, error) {
 	// Check if the query is related to time or weather - these shouldn't be cached
 	lowerQuery := strings.ToLower(s.config.Query)
@@ -466,10 +105,10 @@ func (s *BingScraper) BingScrape() (BingInfo, error) {
 	return result, err
 }
 
-// fetchBingResults contains the browser-based implementation
+// fetchBingResults performs the actual scraping of Bing search results
 func (s *BingScraper) fetchBingResults() (BingInfo, error) {
 	// Get a browser context from the pool
-	ctx, returnCtx, err := globalBrowserPool.GetContext()
+	ctx, returnCtx, err := browser.DefaultPool.GetContext()
 	if err != nil {
 		return BingInfo{}, fmt.Errorf("failed to get browser context: %v", err)
 	}
@@ -593,71 +232,39 @@ func (s *BingScraper) fetchBingResults() (BingInfo, error) {
 	return BingInfos, nil
 }
 
-// function to get html of a page
+// getHTML fetches the HTML content of a given URL
 func getHTML(url string) (string, error) {
-	ctx, returnCtx, err := globalBrowserPool.GetContext()
-
-	if err != nil {
-		return "", fmt.Errorf("failed to get browser context: %v", err)
-	}
-
-	defer returnCtx() // Return the context to the pool when done
-
-	var htmlContent string
-
-	// Add a timeout for this specific operation
-	timeoutCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
-
-	// Navigate to the search URL and scrape the content
-	err = chromedp.Run(timeoutCtx,
-		// Navigate to the search URL
-		chromedp.Navigate(url),
-		// Wait for 500ms
-		chromedp.Sleep(1000*time.Millisecond),
-		// Extract the full HTML of the page
-		chromedp.OuterHTML(`html`, &htmlContent, chromedp.ByQuery),
-	)
-	if err != nil {
-		return "", fmt.Errorf("failed to scrape content: %v", err)
-	}
-
-	// return the HTML content
-	return htmlContent, nil
+	return browser.DefaultPool.FetchURL(url, 15*time.Second)
 }
 
+// GetHTMLFromUrl handles HTTP requests to get HTML content from a URL
 func GetHTMLFromUrl(w http.ResponseWriter, r *http.Request) {
 	var requestBody struct {
 		URL string `json:"url"`
 	}
 
 	// Parse the JSON body
-	println("Parsing JSON body")
-
 	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
-		println("Error decoding JSON body:", err)
 		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
 		return
 	}
 
 	if requestBody.URL == "" {
-		println("Error: URL parameter is required")
 		http.Error(w, "URL parameter is required in the request body", http.StatusBadRequest)
 		return
 	}
 
 	htmlContent, err := getHTML(requestBody.URL)
 	if err != nil {
-		println("Error scraping results:", err.Error())
-		http.Error(w, "Error scraping results", http.StatusInternalServerError)
+		http.Error(w, "Error scraping results: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	println(htmlContent)
 	w.Header().Set("Content-Type", "text/plain")
 	w.Write([]byte(htmlContent))
 }
 
+// StandardBingHandler handles HTTP requests for Bing searches
 func StandardBingHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	query := vars["query"]
@@ -673,7 +280,7 @@ func StandardBingHandler(w http.ResponseWriter, r *http.Request) {
 	scraper := NewBingScraper(config)
 	BingInfos, err := scraper.BingScrape()
 	if err != nil {
-		http.Error(w, "Error scraping results", http.StatusInternalServerError)
+		http.Error(w, "Error scraping results: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -685,10 +292,4 @@ func StandardBingHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(jsonData)
-}
-
-// Initialize browser pool at package level
-func init() {
-	// Initialize the browser pool in a background goroutine
-	go globalBrowserPool.Initialize()
 }

@@ -230,10 +230,10 @@ func (s *BingScraper) fetchBingResults() (BingInfo, error) {
 
 	// Check if the answer box type is "none"
 	answerBox := <-answerBoxCh
-	if answerBox != nil && answerBox.Type != "none" {
+	if answerBox != nil && answerBox.Type != "none" && answerBox.Type != "" {
 		BingInfos.AnswerBox = *answerBox
 	} else {
-		// Use empty struct if type is none
+		// Use empty struct if type is none or empty
 		BingInfos.AnswerBox = bingsearch.BingAnswerBox{}
 	}
 

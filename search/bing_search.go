@@ -227,7 +227,15 @@ func (s *BingScraper) fetchBingResults() (BingInfo, error) {
 	}()
 
 	BingInfos.Links = BingLinks
-	BingInfos.AnswerBox = *<-answerBoxCh
+
+	// Check if the answer box type is "none"
+	answerBox := <-answerBoxCh
+	if answerBox != nil && answerBox.Type != "none" {
+		BingInfos.AnswerBox = *answerBox
+	} else {
+		// Use empty struct if type is none
+		BingInfos.AnswerBox = bingsearch.BingAnswerBox{}
+	}
 
 	return BingInfos, nil
 }

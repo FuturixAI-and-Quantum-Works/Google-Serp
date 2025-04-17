@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"googlescrapper/scraper"
 	"googlescrapper/search"
 	"googlescrapper/stock"
 	"log"
@@ -29,6 +30,10 @@ func main() {
 	router.HandleFunc("/stock/live-price/{tickerId}", stock.GetLivePriceV2Handler)
 	router.HandleFunc("/stock/forecast/{tickerId}", stock.GetStockForecastHandler).Methods("GET")
 	router.HandleFunc("/scrape/{stockIdentifier}", stock.ScrapeStockData).Methods("GET")
+
+	// Add the URL scraper endpoints
+	router.HandleFunc("/scrape-url", scraper.ScrapeURLHandler).Methods("POST")
+	router.HandleFunc("/clean-html", scraper.GetCleanHTMLHandler).Methods("POST") // New endpoint for clean HTML
 
 	// Read environment variables
 	redisAddr := os.Getenv("REDIS_ADDR")

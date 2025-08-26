@@ -22,6 +22,7 @@ import (
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
 	"github.com/gorilla/mux"
+	cdp "github.com/chromedp/cdproto"
 )
 
 // BingLink represents a single search result link from Bing
@@ -59,7 +60,11 @@ func NewBingScraper(config BingConfig) *BingScraper {
 
 // buildBingURL creates a Bing search URL for the given query
 func (s *BingScraper) buildBingURL(query string) string {
-	return fmt.Sprintf("https://www.bing.com/search?q=%s", url.QueryEscape(query))
+	// Add market (mkt) and setlang parameters to force English results
+	// mkt=en-US forces US English market
+	// setlang=en forces English interface
+	// cc=US sets country code to US
+	return fmt.Sprintf("https://www.bing.com/search?q=%s&mkt=en-US&setlang=en&cc=US", url.QueryEscape(query))
 }
 
 // generateCacheKey creates a unique key for caching based on the query
@@ -127,7 +132,7 @@ func (s *BingScraper) fetchBingResults() (BingInfo, error) {
 		chromedp.ActionFunc(func(ctx context.Context) error {
 			return network.SetExtraHTTPHeaders(map[string]interface{}{
 				"accept":                    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
-				"accept-language":           "en-US,en;q=0.9",
+				"accept-language":           "en-US,en;q=0.9,en-GB;q=0.8",
 				"cache-control":             "no-cache",
 				"pragma":                    "no-cache",
 				"sec-ch-ua":                 "\"Chromium\";v=\"135\", \"Not-A.Brand\";v=\"8\"",
@@ -138,10 +143,44 @@ func (s *BingScraper) fetchBingResults() (BingInfo, error) {
 				"sec-fetch-site":            "same-origin",
 				"sec-fetch-user":            "?1",
 				"upgrade-insecure-requests": "1",
+				"user-agent":                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
 			}).Do(ctx)
 		}),
 		// Clear cookies to avoid personalization
 		network.ClearBrowserCookies(),
+		// Set cookies to force English using network methods
+		chromedp.ActionFunc(func(ctx context.Context) error {
+			expr := cdp.TimeSinceEpoch(time.Now().Add(365 * 24 * time.Hour))
+			return network.SetCookies([]*network.CookieParam{
+				{
+					Name:     "_EDGE_S",
+					Value:    "mkt=en-us",
+					Domain:   ".bing.com",
+					Path:     "/",
+					Expires:  &expr,
+					HTTPOnly: false,
+					Secure:   false,
+				},
+				{
+					Name:     "_EDGE_V",
+					Value:    "1",
+					Domain:   ".bing.com",
+					Path:     "/",
+					Expires:  &expr,
+					HTTPOnly: false,
+					Secure:   false,
+				},
+				{
+					Name:     "MUID",
+					Value:    "en-US",
+					Domain:   ".bing.com",
+					Path:     "/",
+					Expires:  &expr,
+					HTTPOnly: false,
+					Secure:   false,
+				},
+			}).Do(ctx)
+		}),
 		// Navigate to the search URL
 		chromedp.Navigate(searchURL),
 		// Wait for results to appear

@@ -54,6 +54,7 @@ func (pool *Pool) Initialize() {
 
 	// Create a shared allocator context with options
 	opts := append(chromedp.DefaultExecAllocatorOptions[:],
+		chromedp.ExecPath("/usr/bin/google-chrome-stable"),
 		chromedp.Flag("headless", true),
 		chromedp.Flag("disable-extensions", true),
 		chromedp.Flag("disable-dev-shm-usage", true),
